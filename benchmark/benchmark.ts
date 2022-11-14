@@ -212,16 +212,21 @@ async function benchmarkFiles(benchmarkOptions: BenchmarkOptions): Promise<void>
   if (!benchmarkOptions.jsonOutput) {
     console.log(`Testing against ${numLines(benchmarkOptions)} LOC`);
   }
+  const sourceMaps = process.env.SOURCE_MAPS === "true";
   /* eslint-disable @typescript-eslint/require-await */
   await runBenchmark(
     "Sucrase",
     benchmarkOptions,
     async (code: string, path: string) =>
       sucrase.transform(code, {
+        filePath: path,
         transforms: path.endsWith(".ts")
           ? ["imports", "typescript"]
           : ["jsx", "imports", "typescript"],
         disableESTransforms: true,
+        sourceMapOptions: sourceMaps
+          ? {compiledFilename: path.replace(/(\.[jt]sx?)?$/, ".out.js")}
+          : undefined,
       }).code,
   );
   if (benchmarkOptions.sucraseOnly) {
@@ -245,6 +250,7 @@ async function benchmarkFiles(benchmarkOptions: BenchmarkOptions): Promise<void>
         module: {
           type: "commonjs",
         },
+        sourceMaps,
       }).code,
   );
   // esbuild's transformSync has significant overhead since it spins up an
@@ -262,6 +268,7 @@ async function benchmarkFiles(benchmarkOptions: BenchmarkOptions): Promise<void>
         await esbuild.transform(code, {
           loader: path.endsWith(".ts") ? "ts" : "tsx",
           format: "cjs",
+          sourcemap: sourceMaps ? "external" : false,
         })
       ).code,
   );
@@ -274,6 +281,7 @@ async function benchmarkFiles(benchmarkOptions: BenchmarkOptions): Promise<void>
           module: TypeScript.ModuleKind.CommonJS,
           jsx: TypeScript.JsxEmit.React,
           target: TypeScript.ScriptTarget.ESNext,
+          sourceMap: sourceMaps,
         },
       }).outputText,
   );
@@ -292,7 +300,8 @@ async function benchmarkFiles(benchmarkOptions: BenchmarkOptions): Promise<void>
           "@babel/plugin-proposal-export-namespace-from",
           ["@babel/plugin-proposal-decorators", {legacy: true}],
         ],
-      }).code,
+        sourceMaps,
+      })!.code!,
   );
   /* eslint-enable @typescript-eslint/require-await */
 }
