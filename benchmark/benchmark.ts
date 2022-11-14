@@ -1,6 +1,5 @@
 #!./node_modules/.bin/sucrase-node
 /* eslint-disable no-console */
-// @ts-ignore: babel-core package missing types.
 import * as babel from "@babel/core";
 import * as swc from "@swc/core";
 import * as esbuild from "esbuild";
