@@ -25,6 +25,7 @@ export default class TokenProcessor {
     readonly isFlowEnabled: boolean,
     readonly disableESTransforms: boolean,
     readonly helperManager: HelperManager,
+    readonly isSourceMapsEnabled: boolean,
   ) {}
 
   /**
@@ -57,7 +58,9 @@ export default class TokenProcessor {
 
   reset(): void {
     this.resultCode = "";
-    this.resultMappings = new Array(this.tokens.length);
+    if (this.isSourceMapsEnabled) {
+      this.resultMappings = new Array(this.tokens.length);
+    }
     this.tokenIndex = 0;
   }
 
@@ -178,7 +181,9 @@ export default class TokenProcessor {
   replaceToken(newCode: string): void {
     this.resultCode += this.previousWhitespaceAndComments();
     this.appendTokenPrefix();
-    this.resultMappings[this.tokenIndex] = this.resultCode.length;
+    if (this.isSourceMapsEnabled) {
+      this.resultMappings[this.tokenIndex] = this.resultCode.length;
+    }
     this.resultCode += newCode;
     this.appendTokenSuffix();
     this.tokenIndex++;
@@ -187,7 +192,9 @@ export default class TokenProcessor {
   replaceTokenTrimmingLeftWhitespace(newCode: string): void {
     this.resultCode += this.previousWhitespaceAndComments().replace(/[^\r\n]/g, "");
     this.appendTokenPrefix();
-    this.resultMappings[this.tokenIndex] = this.resultCode.length;
+    if (this.isSourceMapsEnabled) {
+      this.resultMappings[this.tokenIndex] = this.resultCode.length;
+    }
     this.resultCode += newCode;
     this.appendTokenSuffix();
     this.tokenIndex++;
@@ -229,7 +236,9 @@ export default class TokenProcessor {
   copyToken(): void {
     this.resultCode += this.previousWhitespaceAndComments();
     this.appendTokenPrefix();
-    this.resultMappings[this.tokenIndex] = this.resultCode.length;
+    if (this.isSourceMapsEnabled) {
+      this.resultMappings[this.tokenIndex] = this.resultCode.length;
+    }
     this.resultCode += this.code.slice(
       this.tokens[this.tokenIndex].start,
       this.tokens[this.tokenIndex].end,
@@ -242,7 +251,9 @@ export default class TokenProcessor {
     this.resultCode += this.previousWhitespaceAndComments();
     this.appendTokenPrefix();
     this.resultCode += prefix;
-    this.resultMappings[this.tokenIndex] = this.resultCode.length;
+    if (this.isSourceMapsEnabled) {
+      this.resultMappings[this.tokenIndex] = this.resultCode.length;
+    }
     this.resultCode += this.code.slice(
       this.tokens[this.tokenIndex].start,
       this.tokens[this.tokenIndex].end,
