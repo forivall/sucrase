@@ -15,12 +15,24 @@ async function main(): Promise<void> {
   process.chdir(__dirname);
 
   const benchmark = process.argv[2] || "jest";
+  const options: Pick<BenchmarkOptions, "sourceMaps" | "jsonOutput" | "sucraseOnly"> = {};
+  const simpleSourcemaps = Boolean(~process.argv.indexOf("--sourceMaps=simple", 3));
+  if (simpleSourcemaps || ~process.argv.indexOf("--sourceMaps", 3)) {
+    options.sourceMaps = {simple: simpleSourcemaps};
+  }
+  if (~process.argv.indexOf("--json", 3)) {
+    options.jsonOutput = true;
+  }
+  if (~process.argv.indexOf("--sucraseOnly", 3)) {
+    options.sucraseOnly = true;
+  }
+
   if (benchmark === "jest") {
-    await benchmarkJest();
+    await benchmarkJest(options);
   } else if (benchmark === "jest-diff") {
-    await benchmarkJestForDiff();
+    await benchmarkJestForDiff(options);
   } else if (benchmark === "jest-dev") {
-    await benchmarkJestForDev();
+    await benchmarkJestForDev(options);
   } else if (benchmark === "project") {
     await benchmarkProject();
   } else if (benchmark === "sample") {
@@ -80,8 +92,8 @@ async function main(): Promise<void> {
  * which JS features are transformed. The "test" benchmark can be used to
  * spot-check the output for various simple cases.
  */
-async function benchmarkJest(): Promise<void> {
-  await benchmarkFiles({files: await getJestFiles(), numIterations: 3});
+async function benchmarkJest(options: Pick<BenchmarkOptions, "sourceMaps">): Promise<void> {
+  await benchmarkFiles({files: await getJestFiles(), numIterations: 3, ...options});
 }
 
 async function getJestFiles(): Promise<Array<FileInfo>> {
@@ -110,13 +122,14 @@ async function getJestFiles(): Promise<Array<FileInfo>> {
 /**
  * Run the Jest benchmark with JSON stdout so that external tools can read it.
  */
-async function benchmarkJestForDiff(): Promise<void> {
+async function benchmarkJestForDiff(options: Pick<BenchmarkOptions, "sourceMaps">): Promise<void> {
   await benchmarkFiles({
     files: await getJestFiles(),
     numIterations: 15,
     warmUp: true,
     sucraseOnly: true,
     jsonOutput: true,
+    ...options,
   });
 }
 
@@ -124,12 +137,13 @@ async function benchmarkJestForDiff(): Promise<void> {
  * Run the Jest benchmark many times with warm-up to test Sucrase's performance
  * in response to code changes.
  */
-async function benchmarkJestForDev(): Promise<void> {
+async function benchmarkJestForDev(options: Pick<BenchmarkOptions, "sourceMaps">): Promise<void> {
   await benchmarkFiles({
     files: await getJestFiles(),
     numIterations: 15,
     warmUp: true,
     sucraseOnly: true,
+    ...options,
   });
 }
 
@@ -201,6 +215,9 @@ interface BenchmarkOptions {
   // sucraseOnly, so in that case stdout as a whole is valid JSON), so that the
   // timing results can be read by other tools.
   jsonOutput?: boolean;
+  // If defined, enable sourcemap generation with the given options. This is to
+  // evaluate the performance impact of sourcemap generation.
+  sourceMaps?: Omit<sucrase.SourceMapOptions, "compiledFilename">;
 }
 
 /**
@@ -212,26 +229,39 @@ async function benchmarkFiles(benchmarkOptions: BenchmarkOptions): Promise<void>
   if (!benchmarkOptions.jsonOutput) {
     console.log(`Testing against ${numLines(benchmarkOptions)} LOC`);
   }
-  const sourceMaps = process.env.SOURCE_MAPS === "true";
-  /* eslint-disable @typescript-eslint/require-await */
-  await runBenchmark(
-    "Sucrase",
-    benchmarkOptions,
-    async (code: string, path: string) =>
+
+  let runSucraseTrial: (code: string, path: string) => Promise<string>;
+  if (benchmarkOptions.sourceMaps) {
+    const {simple} = benchmarkOptions.sourceMaps;
+    /* eslint-disable @typescript-eslint/require-await */
+    runSucraseTrial = async (code: string, path: string) =>
       sucrase.transform(code, {
         filePath: path,
         transforms: path.endsWith(".ts")
           ? ["imports", "typescript"]
           : ["jsx", "imports", "typescript"],
         disableESTransforms: true,
-        sourceMapOptions: sourceMaps
-          ? {compiledFilename: path.replace(/(\.[jt]sx?)?$/, ".out.js")}
-          : undefined,
-      }).code,
-  );
+        sourceMapOptions: {simple, compiledFilename: path.replace(/(\.[jt]sx?)?$/, ".out.js")},
+      }).code;
+  } else {
+    /* eslint-disable @typescript-eslint/require-await */
+    runSucraseTrial = async (code: string, path: string) =>
+      sucrase.transform(code, {
+        filePath: path,
+        transforms: path.endsWith(".ts")
+          ? ["imports", "typescript"]
+          : ["jsx", "imports", "typescript"],
+        disableESTransforms: true,
+      }).code;
+  }
+  await runBenchmark("Sucrase", benchmarkOptions, runSucraseTrial);
+
   if (benchmarkOptions.sucraseOnly) {
     return;
   }
+
+  const sourceMaps = Boolean(benchmarkOptions.sourceMaps);
+
   // To run swc in single-threaded mode, we call into it repeatedly using
   // transformSync, which seems to have minimal overhead.
   await runBenchmark(
@@ -352,6 +382,7 @@ export default async function runBenchmark(
         totalTime,
         linesPerSecond: Math.round(numLines(benchmarkOptions) / totalTime),
         totalLines: numLines(benchmarkOptions),
+        sourceMaps: benchmarkOptions.sourceMaps,
       }),
     );
   } else {
