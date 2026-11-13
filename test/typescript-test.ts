@@ -2819,24 +2819,34 @@ describe("typescript transform", () => {
   });
 
   it("handles import type =", () => {
-    assertTypeScriptESMResult(
+    assertTypeScriptImportResult(
       `
       import type A = require("A");
     `,
-      `
+      {
+        expectedCJSResult: `"use strict";
       ;
     `,
+        expectedESMResult: `
+      ;
+    `,
+      },
     );
   });
 
   it("handles importing an identifier named type", () => {
-    assertTypeScriptESMResult(
+    assertTypeScriptImportResult(
       `
       import type = require("A");
     `,
-      `
+      {
+        expectedCJSResult: `"use strict";
       ;
     `,
+        expectedESMResult: `
+      ;
+    `,
+      },
     );
   });
 
